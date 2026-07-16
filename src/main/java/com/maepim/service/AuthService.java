@@ -1,11 +1,14 @@
 package com.maepim.service;
 
+import com.maepim.dto.request.AddressRequest;
 import com.maepim.dto.request.LoginRequest;
 import com.maepim.dto.request.SignupRequest;
 import com.maepim.dto.response.JwtResponse;
+import com.maepim.entity.Address;
 import com.maepim.entity.Role;
 import com.maepim.entity.UserStatus;
 import com.maepim.entity.User;
+import com.maepim.repository.AddressRepository;
 import com.maepim.repository.RoleRepository;
 import com.maepim.repository.UserRepository;
 import com.maepim.security.jwt.JwtService;
@@ -18,6 +21,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.HashSet;
 import java.util.List;
@@ -35,6 +39,9 @@ public class AuthService implements CommandLineRunner {
 
     @Autowired
     private RoleRepository roleRepository;
+
+    @Autowired
+    private AddressRepository addressRepository;
 
     @Autowired
     private PasswordEncoder encoder;
@@ -63,6 +70,7 @@ public class AuthService implements CommandLineRunner {
                 userDetails.getUsername(), userDetails.getEmail(), roles);
     }
 
+    @Transactional
     public void registerUser(SignupRequest signUpRequest) {
         if (userRepository.existsByUsername(signUpRequest.getUsername())) {
             throw new RuntimeException("Error: Username is already taken!");
@@ -79,8 +87,6 @@ public class AuthService implements CommandLineRunner {
 
         Set<String> strRoles = signUpRequest.getRole();
         Set<Role> roles = new HashSet<>();
-        UserStatus status = signUpRequest.getStatus();
-
         if (strRoles == null) {
             Role userRole = roleRepository.findByRoleName("ROLE_CUSTOMER")
                     .orElseThrow(() -> new RuntimeException("Error: Role is not found."));
@@ -107,12 +113,24 @@ public class AuthService implements CommandLineRunner {
             });
         }
 
+        // Set user properties
         user.setRoles(roles);
-        user.setStatus(status);
-        // The default status is now set to PENDING_VERIFICATION within the User entity itself.
-        // This makes the entity more robust and the service logic cleaner.
-        // No need to set the status here unless you want to override the default.
+        user.setStatus(signUpRequest.getStatus());
+        user.setPhone(signUpRequest.getPhone());
+        user.setFirstName(signUpRequest.getFirstName());
+        user.setLastName(signUpRequest.getLastName());
         userRepository.save(user);
+
+        Address address = new Address();
+
+        address.setUser(user);
+        address.setAddress(signUpRequest.getAddress().getAddress());
+        address.setSubdistrict(signUpRequest.getAddress().getSubdistrict());
+        address.setDistrict(signUpRequest.getAddress().getDistrict());
+        address.setProvince(signUpRequest.getAddress().getProvince());
+        address.setPostalCode(signUpRequest.getAddress().getPostalCode());
+        addressRepository.save(address);
+
     }
 
     @Override

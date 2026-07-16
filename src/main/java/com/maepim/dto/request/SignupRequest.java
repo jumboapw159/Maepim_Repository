@@ -1,5 +1,6 @@
 package com.maepim.dto.request;
 
+import com.maepim.dto.request.AddressRequest;
 import com.maepim.entity.UserStatus;
 
 import java.util.Set;
@@ -10,8 +11,11 @@ public class SignupRequest {
     private String password;
     private Set<String> role;
     private UserStatus status;
+    private String phone;
+    private String firstName;
+    private String lastName;
+    private AddressRequest address;
 
-    // Getters and Setters
     public String getUsername() {
         return username;
     }
@@ -50,5 +54,37 @@ public class SignupRequest {
 
     public void setStatus(UserStatus status) {
         this.status = status;
+    }
+
+    public String getPhone() {
+        return phone;
+    }
+
+    public void setPhone(String phone) {
+        this.phone = phone;
+    }
+
+    public String getFirstName() {
+        return firstName;
+    }
+
+    public void setFirstName(String firstName) {
+        this.firstName = firstName;
+    }
+
+    public String getLastName() {
+        return lastName;
+    }
+
+    public void setLastName(String lastName) {
+        this.lastName = lastName;
+    }
+
+    public AddressRequest getAddress() {
+        return address;
+    }
+
+    public void setAddress(AddressRequest address) {
+        this.address = address;
     }
 }
