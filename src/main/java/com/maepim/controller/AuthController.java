@@ -1,6 +1,8 @@
 package com.maepim.controller;
 
+import com.maepim.dto.request.ForgotPasswordRequest;
 import com.maepim.dto.request.LoginRequest;
+import com.maepim.dto.request.ResetPasswordRequest;
 import com.maepim.dto.request.SignupRequest;
 import com.maepim.dto.response.JwtResponse;
 import com.maepim.dto.response.MessageResponse;
@@ -26,13 +28,41 @@ public class AuthController {
 
     @PostMapping("/signup")
     public ResponseEntity<?> registerUser(@Valid @RequestBody SignupRequest signUpRequest) {
-        authService.registerUser(signUpRequest);
-        return ResponseEntity.ok(new MessageResponse("User registered successfully!"));
+        try {
+            authService.registerUser(signUpRequest);
+            return ResponseEntity.ok(new MessageResponse("User registered successfully!"));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(new MessageResponse(e.getMessage()));
+        }
     }
 
     @PostMapping("/signout")
     public ResponseEntity<?> logoutUser() {
-        authService.logoutUser();
-        return ResponseEntity.ok(new MessageResponse("Log out successful!"));
+        try {
+            authService.logoutUser();
+            return ResponseEntity.ok(new MessageResponse("Log out successful!"));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(new MessageResponse(e.getMessage()));
+        }
+    }
+
+    @PostMapping("/forgot-password")
+    public ResponseEntity<?> forgotPassword(@Valid @RequestBody ForgotPasswordRequest forgotPasswordRequest) {
+        try {
+            authService.forgotPassword(forgotPasswordRequest.getEmail());
+            return ResponseEntity.ok(new MessageResponse("OTP sent to your email."));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(new MessageResponse(e.getMessage()));
+        }
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<?> resetPassword(@Valid @RequestBody ResetPasswordRequest resetPasswordRequest) {
+        try {
+            authService.resetPassword(resetPasswordRequest.getEmail(), resetPasswordRequest.getOtp(), resetPasswordRequest.getNewPassword());
+            return ResponseEntity.ok(new MessageResponse("Password has been reset successfully."));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(new MessageResponse(e.getMessage()));
+        }
     }
 }

@@ -1,13 +1,9 @@
 package com.maepim.service;
 
-import com.maepim.dto.request.AddressRequest;
 import com.maepim.dto.request.LoginRequest;
 import com.maepim.dto.request.SignupRequest;
 import com.maepim.dto.response.JwtResponse;
-import com.maepim.entity.Address;
-import com.maepim.entity.Role;
-import com.maepim.entity.UserStatus;
-import com.maepim.entity.User;
+import com.maepim.entity.*;
 import com.maepim.repository.AddressRepository;
 import com.maepim.repository.RoleRepository;
 import com.maepim.repository.UserRepository;
@@ -25,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -51,6 +48,12 @@ public class AuthService implements CommandLineRunner {
 
     @Autowired
     private RefreshTokenService refreshTokenService;
+
+    @Autowired
+    private OtpService otpService;
+
+    @Autowired
+    private EmailService emailService;
 
     public JwtResponse authenticateUser(LoginRequest loginRequest) {
         Authentication authentication = authenticationManager.authenticate(
@@ -144,6 +147,31 @@ public class AuthService implements CommandLineRunner {
 
     }
 
+    public void forgotPassword(String email) {
+        Optional<User> userOptional = userRepository.findByEmail(email);
+        if (userOptional.isPresent()) {
+            User user = userOptional.get();
+            if (user.getStatus() != UserStatus.ACTIVE) {
+                throw new RuntimeException("Password reset is not allowed for inactive accounts.");
+            }
+            String otp = otpService.createOtp(email);
+            emailService.sendOtpEmail(email, otp);
+        }
+        // Still return success to prevent user enumeration, even if email not found or status is not active
+        // The AuthController will handle the RuntimeException for inactive accounts.
+    }
+
+    public void resetPassword(String email, String otp, String newPassword) {
+        otpService.verifyOtp(email, otp);
+
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("Error: Email not found."));
+        user.setPassword(encoder.encode(newPassword));
+        userRepository.save(user);
+
+        otpService.deleteOtp(email, otp);
+    }
+
     @Override
     public void run(String... args) throws Exception {
         if (!userRepository.existsByUsername("admin")) {
@@ -153,7 +181,6 @@ public class AuthService implements CommandLineRunner {
                     .orElseThrow(() -> new RuntimeException("Error: Role is not found."));
             roles.add(adminRole);
             admin.setRoles(roles);
-            // Set the status for the initial admin user
             admin.setStatus(UserStatus.ACTIVE);
             userRepository.save(admin);
         }

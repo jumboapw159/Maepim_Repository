@@ -50,7 +50,7 @@ public class SecurityConfig {
                 .exceptionHandling(exception -> exception.authenticationEntryPoint(unauthorizedHandler))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth ->
-                        auth.requestMatchers("/api/auth/signin", "/api/auth/signup").permitAll()
+                        auth.requestMatchers("/api/auth/signin", "/api/auth/signup", "/api/auth/forgot-password", "/api/auth/reset-password").permitAll()
                                 .anyRequest().authenticated()
                 );
 
