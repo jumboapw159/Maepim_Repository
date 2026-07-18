@@ -111,7 +111,7 @@ CREATE TABLE refresh_tokens
     token           TEXT NOT NULL UNIQUE,
     expiry_date     TIMESTAMP NOT NULL,
     revoked         BOOLEAN DEFAULT FALSE,
-    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_refresh_token_user
         FOREIGN KEY(user_id)
         REFERENCES users(id)
@@ -128,7 +128,7 @@ CREATE TABLE login_history
     user_id         BIGINT,
     ip_address      VARCHAR(100),
     user_agent      TEXT,
-    login_time      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    login_time      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     success         BOOLEAN,
     CONSTRAINT fk_login_history_user
         FOREIGN KEY(user_id)

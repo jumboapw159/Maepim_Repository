@@ -70,6 +70,17 @@ public class AuthService implements CommandLineRunner {
                 userDetails.getUsername(), userDetails.getEmail(), roles);
     }
 
+    public void logoutUser() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null && authentication.getPrincipal() instanceof UserDetailsImpl) {
+            UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+            Long userId = userDetails.getId();
+            refreshTokenService.deleteByUserId(userId);
+        } else {
+            throw new RuntimeException("No user is currently authenticated.");
+        }
+    }
+
     @Transactional
     public void registerUser(SignupRequest signUpRequest) {
         if (userRepository.existsByUsername(signUpRequest.getUsername())) {
