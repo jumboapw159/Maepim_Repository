@@ -1,12 +1,13 @@
 package com.maepim.controller;
 
+import com.maepim.dto.request.FacebookLoginRequest; // New import
 import com.maepim.dto.request.ForgotPasswordRequest;
 import com.maepim.dto.request.GoogleLoginRequest;
 import com.maepim.dto.request.LoginRequest;
-import com.maepim.dto.request.RefreshTokenRequest; // New import
+import com.maepim.dto.request.RefreshTokenRequest;
 import com.maepim.dto.request.ResetPasswordRequest;
 import com.maepim.dto.request.SignupRequest;
-import com.maepim.dto.request.VerifyOtpRequest; // New import
+import com.maepim.dto.request.VerifyOtpRequest;
 import com.maepim.dto.response.JwtResponse;
 import com.maepim.dto.response.MessageResponse;
 import com.maepim.service.AuthService;
@@ -103,20 +104,20 @@ public class AuthController {
         }
     }
 
-//    @Operation(summary = "Verify OTP", description = "Verifies the One-Time Password sent to the user's email for password reset.")
-//    @ApiResponse(responseCode = "200", description = "OTP verified successfully",
-//            content = @Content(mediaType = "application/json", schema = @Schema(implementation = MessageResponse.class)))
-//    @ApiResponse(responseCode = "400", description = "Bad request (e.g., invalid/expired OTP, email not found)",
-//            content = @Content(mediaType = "application/json", schema = @Schema(implementation = MessageResponse.class)))
-//    @PostMapping("/verify-otp")
-//    public ResponseEntity<?> verifyOtp(@Valid @RequestBody VerifyOtpRequest verifyOtpRequest) {
-//        try {
-//            authService.verifyOtp(verifyOtpRequest.getEmail(), verifyOtpRequest.getOtp());
-//            return ResponseEntity.ok(new MessageResponse("OTP verified successfully."));
-//        } catch (RuntimeException e) {
-//            return ResponseEntity.badRequest().body(new MessageResponse(e.getMessage()));
-//        }
-//    }
+    @Operation(summary = "Verify OTP", description = "Verifies the One-Time Password sent to the user's email for password reset.")
+    @ApiResponse(responseCode = "200", description = "OTP verified successfully",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = MessageResponse.class)))
+    @ApiResponse(responseCode = "400", description = "Bad request (e.g., invalid/expired OTP, email not found)",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = MessageResponse.class)))
+    @PostMapping("/verify-otp")
+    public ResponseEntity<?> verifyOtp(@Valid @RequestBody VerifyOtpRequest verifyOtpRequest) {
+        try {
+            authService.verifyOtp(verifyOtpRequest.getEmail(), verifyOtpRequest.getOtp());
+            return ResponseEntity.ok(new MessageResponse("OTP verified successfully."));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(new MessageResponse(e.getMessage()));
+        }
+    }
 
     @Operation(summary = "Reset Password", description = "Resets user password using a valid OTP and email.")
     @ApiResponse(responseCode = "200", description = "Password reset successfully",
@@ -145,6 +146,21 @@ public class AuthController {
             return ResponseEntity.ok(jwtResponse);
         } catch (GeneralSecurityException | IOException e) {
             return ResponseEntity.badRequest().body(new MessageResponse("Error verifying Google ID Token: " + e.getMessage()));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(new MessageResponse(e.getMessage()));
+        }
+    }
+
+    @Operation(summary = "Facebook Sign In", description = "Authenticates user via Facebook Access Token, registering if new, and returns JWT and refresh tokens.")
+    @ApiResponse(responseCode = "200", description = "User authenticated successfully via Facebook",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = JwtResponse.class)))
+    @ApiResponse(responseCode = "400", description = "Bad request (e.g., invalid Facebook Access Token, account inactive)",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = MessageResponse.class)))
+    @PostMapping("/facebook")
+    public ResponseEntity<?> facebookSignIn(@Valid @RequestBody FacebookLoginRequest facebookLoginRequest) {
+        try {
+            JwtResponse jwtResponse = authService.facebookSignIn(facebookLoginRequest.getAccessToken());
+            return ResponseEntity.ok(jwtResponse);
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(new MessageResponse(e.getMessage()));
         }

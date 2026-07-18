@@ -59,6 +59,7 @@ public class SecurityConfig {
                                 "/api/auth/verify-otp",
                                 "/api/auth/reset-password",
                                 "/api/auth/google",
+                                "/api/auth/facebook", // New Facebook endpoint
                                 "/v3/api-docs/**",
                                 "/swagger-ui/**",
                                 "/swagger-ui.html"

@@ -2,6 +2,7 @@ package com.maepim.service;
 
 import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
 import com.google.api.client.googleapis.auth.oauth2.GoogleIdTokenVerifier;
+import com.maepim.config.AppConfig; // Import AppConfig
 import com.maepim.dto.request.LoginRequest;
 import com.maepim.dto.request.SignupRequest;
 import com.maepim.dto.response.JwtResponse;
@@ -24,12 +25,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.web.client.RestTemplate; // Import RestTemplate
 
 import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -73,8 +76,17 @@ public class AuthService implements CommandLineRunner {
     @Autowired
     private CustomUserDetailsService userDetailsService;
 
+    @Autowired
+    private RestTemplate restTemplate; // Inject RestTemplate
+
     @Value("${maepim.app.googleClientId}")
     private String googleClientId;
+
+    @Value("${maepim.app.facebookAppId}")
+    private String facebookAppId;
+
+    @Value("${maepim.app.facebookAppSecret}")
+    private String facebookAppSecret;
 
     public JwtResponse authenticateUser(LoginRequest loginRequest) {
         Authentication authentication = authenticationManager.authenticate(
@@ -233,6 +245,91 @@ public class AuthService implements CommandLineRunner {
         
         String refreshToken = refreshTokenService.createRefreshToken(userDetails.getId()).getToken();
         logger.info("Google Sign-In successful for user: {}", email);
+
+        return generateJwtResponse(userDetails, refreshToken, user);
+    }
+
+    @Transactional
+    public JwtResponse facebookSignIn(String accessToken) {
+        logger.info("Attempting Facebook Sign-In with Access Token.");
+
+        // 1. Debug the access token with Facebook Graph API
+        String debugTokenUrl = String.format("https://graph.facebook.com/debug_token?input_token=%s&access_token=%s|%s",
+                accessToken, facebookAppId, facebookAppSecret);
+        Map<String, Object> debugResponse = restTemplate.getForObject(debugTokenUrl, Map.class);
+
+        if (debugResponse == null || !((Map<String, Object>) debugResponse.get("data")).get("is_valid").equals(true)) {
+            logger.warn("Invalid Facebook Access Token received.");
+            throw new RuntimeException("Invalid Facebook Access Token.");
+        }
+
+        // 2. Get user profile details
+        String userProfileUrl = String.format("https://graph.facebook.com/me?fields=id,email,first_name,last_name&access_token=%s", accessToken);
+        Map<String, Object> userProfile = restTemplate.getForObject(userProfileUrl, Map.class);
+
+        if (userProfile == null || !userProfile.containsKey("email")) {
+            logger.warn("Could not retrieve email from Facebook profile. User profile: {}", userProfile);
+            throw new RuntimeException("Could not retrieve email from Facebook profile. Ensure 'email' permission is granted.");
+        }
+
+        String email = (String) userProfile.get("email");
+        String firstName = (String) userProfile.get("first_name");
+        String lastName = (String) userProfile.get("last_name");
+        String username = email; // Use email as username for Facebook sign-in
+
+        logger.info("Facebook Access Token verified for email: {}", email);
+
+        Optional<User> userOptional = userRepository.findByEmail(email);
+        User user;
+
+        if (userOptional.isEmpty()) {
+            logger.info("User with email {} not found. Registering new user via Facebook.", email);
+            // Register new user
+            user = new User(username, email, encoder.encode(UUID.randomUUID().toString())); // Generate random password
+            user.setFirstName(firstName);
+            user.setLastName(lastName);
+            user.setStatus(UserStatus.ACTIVE); // Set default status
+            user.setEmailVerified(true); // Facebook verified email
+
+            Set<Role> roles = new HashSet<>();
+            Role userRole = roleRepository.findByRoleName("ROLE_CUSTOMER")
+                    .orElseThrow(() -> {
+                        logger.error("Error: ROLE_CUSTOMER not found during Facebook sign-in registration.");
+                        return new RuntimeException("Error: Role is not found.");
+                    });
+            roles.add(userRole);
+            user.setRoles(roles);
+            userRepository.save(user);
+            logger.info("New user {} registered successfully via Facebook.", email);
+        } else {
+            user = userOptional.get();
+            logger.info("User with email {} found. Logging in via Facebook.", email);
+            // Update user details from Facebook payload
+            user.setFirstName(firstName);
+            user.setLastName(lastName);
+            user.setEmailVerified(true); // Facebook verified email
+            userRepository.save(user); // Save updated user
+            logger.debug("User {} details updated from Facebook payload.", email);
+
+            // Ensure user is active
+            if (user.getStatus() != UserStatus.ACTIVE) {
+                logger.warn("Attempted Facebook sign-in for inactive account: {}", email);
+                throw new RuntimeException("Account is inactive. Please contact support.");
+            }
+        }
+
+        // Load UserDetails for the identified/created user
+        UserDetailsImpl userDetails = (UserDetailsImpl) userDetailsService.loadUserByUsername(user.getUsername());
+        logger.debug("UserDetails loaded for user: {}", user.getUsername());
+
+        // Create an authenticated token directly
+        Authentication authentication = new UsernamePasswordAuthenticationToken(
+                userDetails, null, userDetails.getAuthorities());
+
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+        
+        String refreshToken = refreshTokenService.createRefreshToken(userDetails.getId()).getToken();
+        logger.info("Facebook Sign-In successful for user: {}", email);
 
         return generateJwtResponse(userDetails, refreshToken, user);
     }

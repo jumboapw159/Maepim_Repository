@@ -1,0 +1,12 @@
+package com.maepim.dto.request;
+
+import jakarta.validation.constraints.NotBlank;
+import lombok.Getter;
+import lombok.Setter;
+
+@Getter
+@Setter
+public class FacebookLoginRequest {
+    @NotBlank
+    private String accessToken;
+}
