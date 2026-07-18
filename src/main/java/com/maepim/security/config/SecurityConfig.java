@@ -50,7 +50,19 @@ public class SecurityConfig {
                 .exceptionHandling(exception -> exception.authenticationEntryPoint(unauthorizedHandler))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth ->
-                        auth.requestMatchers("/api/auth/signin", "/api/auth/signup", "/api/auth/forgot-password", "/api/auth/reset-password").permitAll()
+                        auth.requestMatchers(
+                                "/api/auth/signin",
+                                "/api/auth/signup",
+                                "/api/auth/logout",
+                                "/api/auth/refresh-token",
+                                "/api/auth/forgot-password",
+                                "/api/auth/verify-otp",
+                                "/api/auth/reset-password",
+                                "/api/auth/google",
+                                "/v3/api-docs/**",
+                                "/swagger-ui/**",
+                                "/swagger-ui.html"
+                        ).permitAll()
                                 .anyRequest().authenticated()
                 );
 

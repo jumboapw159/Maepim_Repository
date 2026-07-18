@@ -1,5 +1,7 @@
 package com.maepim.service;
 
+import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
+import com.google.api.client.googleapis.auth.oauth2.GoogleIdTokenVerifier;
 import com.maepim.dto.request.LoginRequest;
 import com.maepim.dto.request.SignupRequest;
 import com.maepim.dto.response.JwtResponse;
@@ -8,8 +10,10 @@ import com.maepim.repository.AddressRepository;
 import com.maepim.repository.RoleRepository;
 import com.maepim.repository.UserRepository;
 import com.maepim.security.jwt.JwtService;
+import com.maepim.security.service.CustomUserDetailsService;
 import com.maepim.security.service.UserDetailsImpl;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -18,15 +22,23 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
+import java.security.GeneralSecurityException;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
 public class AuthService implements CommandLineRunner {
+
+    private static final Logger logger = LoggerFactory.getLogger(AuthService.class);
 
     @Autowired
     private AuthenticationManager authenticationManager;
@@ -55,22 +67,28 @@ public class AuthService implements CommandLineRunner {
     @Autowired
     private EmailService emailService;
 
+    @Autowired
+    private GoogleIdTokenVerifier googleIdTokenVerifier;
+
+    @Autowired
+    private CustomUserDetailsService userDetailsService;
+
+    @Value("${maepim.app.googleClientId}")
+    private String googleClientId;
+
     public JwtResponse authenticateUser(LoginRequest loginRequest) {
         Authentication authentication = authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(loginRequest.getUsername(), loginRequest.getPassword()));
 
         SecurityContextHolder.getContext().setAuthentication(authentication);
-        String jwt = jwtService.generateJwtToken(authentication);
-
+        
         UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
-        List<String> roles = userDetails.getAuthorities().stream()
-                .map(item -> item.getAuthority())
-                .collect(Collectors.toList());
+        User user = userRepository.findByUsername(userDetails.getUsername())
+                .orElseThrow(() -> new RuntimeException("User not found after authentication.")); // Should not happen
 
         String refreshToken = refreshTokenService.createRefreshToken(userDetails.getId()).getToken();
 
-        return new JwtResponse(jwt, refreshToken, userDetails.getId(),
-                userDetails.getUsername(), userDetails.getEmail(), roles);
+        return generateJwtResponse(userDetails, refreshToken, user);
     }
 
     public void logoutUser() {
@@ -147,6 +165,99 @@ public class AuthService implements CommandLineRunner {
 
     }
 
+    @Transactional
+    public JwtResponse googleSignIn(String idToken) throws GeneralSecurityException, IOException {
+        logger.info("Attempting Google Sign-In with ID Token.");
+        GoogleIdToken googleIdToken = googleIdTokenVerifier.verify(idToken);
+        if (googleIdToken == null) {
+            logger.warn("Invalid Google ID Token received.");
+            throw new RuntimeException("Invalid Google ID Token.");
+        }
+
+        GoogleIdToken.Payload payload = googleIdToken.getPayload();
+        String email = payload.getEmail();
+        String firstName = (String) payload.get("given_name");
+        String lastName = (String) payload.get("family_name");
+        String username = email; // Use email as username for Google sign-in
+
+        logger.info("Google ID Token verified for email: {}", email);
+
+        Optional<User> userOptional = userRepository.findByEmail(email);
+        User user;
+
+        if (userOptional.isEmpty()) {
+            logger.info("User with email {} not found. Registering new user.", email);
+            // Register new user
+            user = new User(username, email, encoder.encode(UUID.randomUUID().toString())); // Generate random password
+            user.setFirstName(firstName);
+            user.setLastName(lastName);
+            user.setStatus(UserStatus.ACTIVE); // Set default status
+            user.setEmailVerified(true); // Google verified email
+
+            Set<Role> roles = new HashSet<>();
+            Role userRole = roleRepository.findByRoleName("ROLE_CUSTOMER")
+                    .orElseThrow(() -> {
+                        logger.error("Error: ROLE_CUSTOMER not found during Google sign-in registration.");
+                        return new RuntimeException("Error: Role is not found.");
+                    });
+            roles.add(userRole);
+            user.setRoles(roles);
+            userRepository.save(user);
+            logger.info("New user {} registered successfully via Google.", email);
+        } else {
+            user = userOptional.get();
+            logger.info("User with email {} found. Logging in.", email);
+            // Update user details from Google payload
+            user.setFirstName(firstName);
+            user.setLastName(lastName);
+            user.setEmailVerified(true); // Google verified email
+            userRepository.save(user); // Save updated user
+            logger.debug("User {} details updated from Google payload.", email);
+
+            // Ensure user is active
+            if (user.getStatus() != UserStatus.ACTIVE) {
+                logger.warn("Attempted Google sign-in for inactive account: {}", email);
+                throw new RuntimeException("Account is inactive. Please contact support.");
+            }
+        }
+
+        // Load UserDetails for the identified/created user
+        UserDetailsImpl userDetails = (UserDetailsImpl) userDetailsService.loadUserByUsername(user.getUsername());
+        logger.debug("UserDetails loaded for user: {}", user.getUsername());
+
+        // Create an authenticated token directly
+        Authentication authentication = new UsernamePasswordAuthenticationToken(
+                userDetails, null, userDetails.getAuthorities());
+
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+        
+        String refreshToken = refreshTokenService.createRefreshToken(userDetails.getId()).getToken();
+        logger.info("Google Sign-In successful for user: {}", email);
+
+        return generateJwtResponse(userDetails, refreshToken, user);
+    }
+
+    public JwtResponse refreshToken(String requestRefreshToken) {
+        RefreshToken refreshToken = refreshTokenService.findByToken(requestRefreshToken)
+                .orElseThrow(() -> new RuntimeException("Refresh token is not in database!"));
+
+        refreshTokenService.verifyExpiration(refreshToken);
+
+        User user = refreshToken.getUser();
+        UserDetailsImpl userDetails = (UserDetailsImpl) userDetailsService.loadUserByUsername(user.getUsername());
+
+        String newJwt = jwtService.generateJwtToken(
+                new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities()));
+
+        return generateJwtResponse(userDetails, requestRefreshToken, user);
+    }
+
+    public void verifyOtp(String email, String otp) {
+        otpService.verifyOtp(email, otp);
+        // OTP is verified, no further action needed here for now.
+        // The client can then call resetPassword.
+    }
+
     public void forgotPassword(String email) {
         Optional<User> userOptional = userRepository.findByEmail(email);
         if (userOptional.isPresent()) {
@@ -184,5 +295,18 @@ public class AuthService implements CommandLineRunner {
             admin.setStatus(UserStatus.ACTIVE);
             userRepository.save(admin);
         }
+    }
+
+    private JwtResponse generateJwtResponse(UserDetailsImpl userDetails, String refreshToken, User user) {
+        String jwt = jwtService.generateJwtToken(
+                new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities())); // Generate JWT from authenticated UserDetails
+
+        List<String> roles = userDetails.getAuthorities().stream()
+                .map(item -> item.getAuthority())
+                .collect(Collectors.toList());
+
+        return new JwtResponse(jwt, refreshToken, userDetails.getId(),
+                userDetails.getUsername(), userDetails.getEmail(),
+                user.getFirstName(), user.getLastName(), user.getPhone(), user.getStatus(), roles);
     }
 }

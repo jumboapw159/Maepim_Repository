@@ -1,7 +1,12 @@
 package com.maepim.dto.response;
 
+import com.maepim.entity.UserStatus; // Import UserStatus
 import java.util.List;
+import lombok.Getter; // Import Getter
+import lombok.Setter; // Import Setter
 
+@Getter
+@Setter
 public class JwtResponse {
     private String token;
     private String type = "Bearer";
@@ -9,70 +14,22 @@ public class JwtResponse {
     private Long id;
     private String username;
     private String email;
+    private String firstName; // New field
+    private String lastName;  // New field
+    private String phone;     // New field
+    private UserStatus status; // New field
     private List<String> roles;
 
-    public JwtResponse(String accessToken, String refreshToken, Long id, String username, String email, List<String> roles) {
+    public JwtResponse(String accessToken, String refreshToken, Long id, String username, String email, String firstName, String lastName, String phone, UserStatus status, List<String> roles) {
         this.token = accessToken;
         this.refreshToken = refreshToken;
         this.id = id;
         this.username = username;
         this.email = email;
-        this.roles = roles;
-    }
-
-    public String getToken() {
-        return token;
-    }
-
-    public void setToken(String token) {
-        this.token = token;
-    }
-
-    public String getType() {
-        return type;
-    }
-
-    public void setType(String type) {
-        this.type = type;
-    }
-
-    public String getRefreshToken() {
-        return refreshToken;
-    }
-
-    public void setRefreshToken(String refreshToken) {
-        this.refreshToken = refreshToken;
-    }
-
-    public Long getId() {
-        return id;
-    }
-
-    public void setId(Long id) {
-        this.id = id;
-    }
-
-    public String getUsername() {
-        return username;
-    }
-
-    public void setUsername(String username) {
-        this.username = username;
-    }
-
-    public String getEmail() {
-        return email;
-    }
-
-    public void setEmail(String email) {
-        this.email = email;
-    }
-
-    public List<String> getRoles() {
-        return roles;
-    }
-
-    public void setRoles(List<String> roles) {
+        this.firstName = firstName; // Initialize new field
+        this.lastName = lastName;   // Initialize new field
+        this.phone = phone;         // Initialize new field
+        this.status = status;       // Initialize new field
         this.roles = roles;
     }
 }
